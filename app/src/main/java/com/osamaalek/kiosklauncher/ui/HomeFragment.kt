@@ -1,14 +1,18 @@
 package com.osamaalek.kiosklauncher.ui
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.* // Import all webkit classes
+import android.widget.EditText
+import android.widget.ImageButton
 import androidx.fragment.app.Fragment
 import com.osamaalek.kiosklauncher.R
+import com.osamaalek.kiosklauncher.util.KioskUtil
 
 /**
  * This fragment is modified to replace the default app launcher with a single, locked WebView
@@ -19,7 +23,7 @@ class HomeFragment : Fragment() {
     private lateinit var webView: WebView
 
     // The Google Form URL the kiosk will be locked to
-    private val KIOSS_URL = "https:/[Insert kiosk link here]"
+    private val KIOSS_URL = "https://totem-nps-panel.lovable.app/totem"
     private val TAG = "KioskWebView"
 
     override fun onCreateView(
@@ -33,9 +37,36 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         webView = view.findViewById(R.id.webView)
+        val btnExit: ImageButton = view.findViewById(R.id.btnExit)
+
+        btnExit.setOnClickListener {
+            showPasswordDialog()
+        }
 
         setupWebView()
         loadWeb()
+    }
+
+    private fun showPasswordDialog() {
+        val editText = EditText(requireContext())
+        editText.hint = "Senha"
+        editText.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Sair do Quiosque")
+            .setMessage("Digite a senha de administrador:")
+            .setView(editText)
+            .setPositiveButton("OK") { _, _ ->
+                val password = editText.text.toString().trim()
+                if (password == "0250") {
+                    KioskUtil.stopKioskMode(requireActivity())
+                    requireActivity().finish()
+                } else {
+                    android.widget.Toast.makeText(requireContext(), "Senha incorreta: $password", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
