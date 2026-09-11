@@ -1,0 +1,72 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*' # Aciona o workflow sempre que uma tag começando com 'v' for criada (ex: v1.0.0, v2.1)
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # Android Studio usa Java 17 por padrão atualmente
+          cache: 'gradle'
+
+      - name: Dar permissão de execução para o gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build do APK
+        run: ./gradlew assembleDebug # ou assembleRelease se você já tiver as chaves de assinatura configuradas
+        
+      - name: Upload APK como artefato temporário
+        uses: actions/upload-artifact@v4
+        with:
+          name: KioskLauncher-APK
+          path: app/build/outputs/apk/debug/app-debug.apk # Caminho padrão do assembleDebug
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Necessário para criar a release
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        
+      - name: Download do APK
+        uses: actions/download-artifact@v4
+        with:
+          name: KioskLauncher-APK
+          path: apk_folder
+
+      - name: Criar arquivo version.json
+        run: |
+          VERSION_NAME="${GITHUB_REF_NAME}"
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/kiosk-launcher.apk"
+          
+          # Cria um JSON simples com a versão e o link de download
+          echo "{ \"version\": \"$VERSION_NAME\", \"apkUrl\": \"$DOWNLOAD_URL\" }" > version.json
+          
+          # Renomeia o APK para um nome padrão
+          mv apk_folder/app-debug.apk kiosk-launcher.apk
+
+      - name: Publicar Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            kiosk-launcher.apk
+            version.json
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
