@@ -13,10 +13,18 @@ import android.view.WindowInsetsController
 import android.window.OnBackInvokedDispatcher
 import android.util.Log
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.osamaalek.kiosklauncher.UpdateManager
+
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        lifecycleScope.launch {
+            UpdateManager.checkAndUpdate(this@MainActivity)
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
         setContentView(R.layout.activity_main)
