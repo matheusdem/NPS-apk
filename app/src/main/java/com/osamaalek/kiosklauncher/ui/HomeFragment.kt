@@ -14,6 +14,11 @@ import androidx.fragment.app.Fragment
 import com.osamaalek.kiosklauncher.R
 import com.osamaalek.kiosklauncher.util.KioskUtil
 
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.osamaalek.kiosklauncher.UpdateManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+
 /**
  * This fragment is modified to replace the default app launcher with a single, locked WebView
  * that loads the designated Google Form URL.
@@ -21,6 +26,7 @@ import com.osamaalek.kiosklauncher.util.KioskUtil
 class HomeFragment : Fragment() {
 
     private lateinit var webView: WebView
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
 
     // The Google Form URL the kiosk will be locked to
     private val KIOSS_URL = "https://totem-nps-panel.lovable.app/totem"
@@ -37,7 +43,23 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         webView = view.findViewById(R.id.webView)
+        swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout)
         val btnExit: ImageButton = view.findViewById(R.id.btnExit)
+
+        // Configura a ação de puxar para baixo (Pull-to-refresh)
+        swipeRefreshLayout.setOnRefreshListener {
+            Log.d(TAG, "Usuário puxou a tela. Atualizando WebView e buscando novas versões do App.")
+            
+            // 1. Recarrega a página web atual
+            webView.reload()
+            
+            // 2. Chama a verificação do GitHub silenciosamente
+            viewLifecycleOwner.lifecycleScope.launch {
+                UpdateManager.checkAndUpdate(requireContext())
+                // Esconde a bolinha de loading do swipe depois que finalizar a checagem
+                swipeRefreshLayout.isRefreshing = false
+            }
+        }
 
         btnExit.setOnClickListener {
             showPasswordDialog()
