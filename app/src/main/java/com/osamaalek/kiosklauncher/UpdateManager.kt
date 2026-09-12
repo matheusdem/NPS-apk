@@ -1,15 +1,14 @@
 package com.osamaalek.kiosklauncher
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInstaller
+import android.net.Uri
 import android.util.Log
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,7 +21,7 @@ object UpdateManager {
     
     /**
      * Verifica no GitHub se há uma versão mais nova. 
-     * Se houver, baixa e instala silenciosamente (requer que o app seja Device Owner).
+     * Se houver, baixa e pede ao usuário para instalar via FileProvider.
      */
     suspend fun checkAndUpdate(context: Context) {
         withContext(Dispatchers.IO) {
@@ -42,8 +41,8 @@ object UpdateManager {
                     Log.d(TAG, "Nova versão encontrada. Iniciando download...")
                     val apkFile = downloadApk(context, apkUrl)
                     if (apkFile != null) {
-                        Log.d(TAG, "Download concluído. Iniciando instalação silenciosa...")
-                        installApkSilently(context, apkFile)
+                        Log.d(TAG, "Download concluído. Solicitando instalação ao usuário...")
+                        promptInstall(context, apkFile)
                     }
                 } else {
                     Log.d(TAG, "O aplicativo já está na versão mais recente.")
@@ -60,16 +59,14 @@ object UpdateManager {
             val url = URL(VERSION_URL)
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
-            
-            // O GitHub pode fazer redirects ao baixar de "latest/download/..."
             connection.instanceFollowRedirects = true
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 val jsonResponse = connection.inputStream.bufferedReader().use { it.readText() }
                 val jsonObject = JSONObject(jsonResponse)
-                val version = jsonObject.optString("version", null)
-                val apkUrl = jsonObject.optString("apkUrl", null)
-                return Pair(version, apkUrl)
+                val version = jsonObject.optString("version")
+                val apkUrl = jsonObject.optString("apkUrl")
+                return Pair(version.takeIf { it.isNotEmpty() }, apkUrl.takeIf { it.isNotEmpty() })
             }
         } catch (e: Exception) {
              Log.e(TAG, "Erro ao buscar version.json: ${e.message}")
@@ -83,9 +80,8 @@ object UpdateManager {
             var connection = url.openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = true
             
-            // Tratamento extra para redirects do GitHub
             var redirect = false
-            var status = connection.responseCode
+            val status = connection.responseCode
             if (status != HttpURLConnection.HTTP_OK) {
                 if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
                     status == HttpURLConnection.HTTP_MOVED_PERM || 
@@ -100,6 +96,7 @@ object UpdateManager {
             }
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                // Salvamos na pasta cache do aplicativo, que o FileProvider tem acesso
                 val apkFile = File(context.cacheDir, "update.apk")
                 
                 connection.inputStream.use { input ->
@@ -117,39 +114,27 @@ object UpdateManager {
         return null
     }
 
-    private fun installApkSilently(context: Context, apkFile: File) {
-        val packageInstaller = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        
-        var sessionId = -1
-        var session: PackageInstaller.Session? = null
-
+    /**
+     * Utiliza um Intent com FileProvider para pedir ao Android que instale o APK.
+     * Como não somos Device Owner, isso abrirá a tela do sistema pedindo confirmação.
+     */
+    private fun promptInstall(context: Context, apkFile: File) {
         try {
-            sessionId = packageInstaller.createSession(params)
-            session = packageInstaller.openSession(sessionId)
+            val apkUri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
 
-            FileInputStream(apkFile).use { input ->
-                session.openWrite("package", 0, apkFile.length()).use { output ->
-                    input.copyTo(output)
-                    session.fsync(output)
-                }
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
 
-            // O commit é o que dispara a instalação no Android
-            val intent = Intent(context, context::class.java) // Intent "dummy", pois não precisamos avisar nenhuma Activity
-            val pendingIntent = PendingIntent.getActivity(
-                context, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            
-            session.commit(pendingIntent.intentSender)
-            Log.d(TAG, "Sessão de instalação comitada. O Android reiniciará o app em breve.")
-            
+            context.startActivity(intent)
+            Log.d(TAG, "Tela de instalação chamada com sucesso.")
         } catch (e: Exception) {
-            Log.e(TAG, "Falha na instalação silenciosa: ${e.message}")
-            session?.abandon()
-        } finally {
-            session?.close()
+            Log.e(TAG, "Falha ao chamar tela de instalação: ${e.message}")
         }
     }
 
