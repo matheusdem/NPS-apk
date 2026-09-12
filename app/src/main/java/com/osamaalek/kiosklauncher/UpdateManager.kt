@@ -1,6 +1,7 @@
 package com.osamaalek.kiosklauncher
 
-import android.app.Activityimport android.content.Context
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
