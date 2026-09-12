@@ -1,10 +1,11 @@
 package com.osamaalek.kiosklauncher
 
-import android.content.Context
+import android.app.Activityimport android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.osamaalek.kiosklauncher.util.KioskUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -118,23 +119,31 @@ object UpdateManager {
      * Utiliza um Intent com FileProvider para pedir ao Android que instale o APK.
      * Como não somos Device Owner, isso abrirá a tela do sistema pedindo confirmação.
      */
-    private fun promptInstall(context: Context, apkFile: File) {
-        try {
-            val apkUri: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
+    private suspend fun promptInstall(context: Context, apkFile: File) {
+        withContext(Dispatchers.Main) {
+            try {
+                // Se o contexto for uma Activity, nós removemos a fixação da tela (Kiosk)
+                // para que o instalador do Android possa aparecer na frente do app.
+                if (context is Activity) {
+                    KioskUtil.stopKioskMode(context)
+                }
 
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                val apkUri: Uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    apkFile
+                )
+
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+
+                context.startActivity(intent)
+                Log.d(TAG, "Tela de instalação chamada com sucesso.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Falha ao chamar tela de instalação: ${e.message}")
             }
-
-            context.startActivity(intent)
-            Log.d(TAG, "Tela de instalação chamada com sucesso.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Falha ao chamar tela de instalação: ${e.message}")
         }
     }
 
