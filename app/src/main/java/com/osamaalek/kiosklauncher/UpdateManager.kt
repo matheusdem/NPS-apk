@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import com.osamaalek.kiosklauncher.util.KioskUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -78,35 +79,48 @@ object UpdateManager {
 
     private fun downloadApk(context: Context, downloadUrl: String): File? {
         try {
-            val url = URL(downloadUrl)
+            var url = URL(downloadUrl)
             var connection = url.openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = true
             
-            var redirect = false
-            val status = connection.responseCode
-            if (status != HttpURLConnection.HTTP_OK) {
+            // Loop robusto para seguir redirecionamentos do GitHub/Azure
+            var loops = 0
+            while (loops < 5) {
+                val status = connection.responseCode
                 if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
                     status == HttpURLConnection.HTTP_MOVED_PERM || 
                     status == HttpURLConnection.HTTP_SEE_OTHER) {
-                    redirect = true
+                    val newUrl = connection.getHeaderField("Location")
+                    if (newUrl != null) {
+                        url = URL(newUrl)
+                        connection = url.openConnection() as HttpURLConnection
+                        connection.instanceFollowRedirects = true
+                        loops++
+                        continue
+                    }
                 }
-            }
-            
-            if (redirect) {
-                val newUrl = connection.getHeaderField("Location")
-                connection = URL(newUrl).openConnection() as HttpURLConnection
+                break
             }
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 // Salvamos na pasta cache do aplicativo, que o FileProvider tem acesso
                 val apkFile = File(context.cacheDir, "update.apk")
+                if (apkFile.exists()) {
+                    apkFile.delete()
+                }
                 
                 connection.inputStream.use { input ->
                     FileOutputStream(apkFile).use { output ->
                         input.copyTo(output)
                     }
                 }
-                return apkFile
+                
+                Log.d(TAG, "APK baixado com sucesso. Tamanho: ${apkFile.length()} bytes")
+                if (apkFile.length() > 100000) { // Valida se é um APK válido (maior que 100KB)
+                    return apkFile
+                } else {
+                    Log.e(TAG, "O arquivo baixado está corrompido ou muito pequeno: ${apkFile.length()} bytes")
+                }
             } else {
                  Log.e(TAG, "Erro ao baixar APK. Código: ${connection.responseCode}")
             }
@@ -127,6 +141,8 @@ object UpdateManager {
                 // para que o instalador do Android possa aparecer na frente do app.
                 if (context is Activity) {
                     KioskUtil.stopKioskMode(context)
+                    // Pequeno delay essencial no Android 9 para o sistema liberar o travamento de tela
+                    kotlinx.coroutines.delay(500)
                 }
 
                 val apkUri: Uri = FileProvider.getUriForFile(
@@ -137,7 +153,10 @@ object UpdateManager {
 
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(apkUri, "application/vnd.android.package-archive")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    // No Android 9 é obrigatório conceder FLAG_GRANT_WRITE_URI_PERMISSION além da leitura
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or 
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 }
 
                 context.startActivity(intent)

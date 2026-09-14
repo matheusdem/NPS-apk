@@ -11,14 +11,33 @@ android {
         applicationId "com.osamaalek.kiosklauncher"
         minSdk 23
         targetSdk 34
-        versionCode 4
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.6"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildTypes {
+    signingConfigs {
+        debug {
+            storeFile file('kiosk.keystore')
+            storePassword 'kiosk123'
+            keyAlias 'kiosk'
+            keyPassword 'kiosk123'
+        }
         release {
+            storeFile file('kiosk.keystore')
+            storePassword 'kiosk123'
+            keyAlias 'kiosk'
+            keyPassword 'kiosk123'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
