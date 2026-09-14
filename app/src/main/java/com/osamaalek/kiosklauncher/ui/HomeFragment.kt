@@ -2,6 +2,11 @@ package com.osamaalek.kiosklauncher.ui
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -13,11 +18,12 @@ import android.widget.ImageButton
 import androidx.fragment.app.Fragment
 import com.osamaalek.kiosklauncher.R
 import com.osamaalek.kiosklauncher.util.KioskUtil
-
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.osamaalek.kiosklauncher.UpdateManager
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * This fragment is modified to replace the default app launcher with a single, locked WebView
@@ -27,6 +33,9 @@ class HomeFragment : Fragment() {
 
     private lateinit var webView: WebView
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
+    
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     // The Google Form URL the kiosk will be locked to
     private val KIOSS_URL = "https://totem-nps-panel.lovable.app/totem"
@@ -67,6 +76,37 @@ class HomeFragment : Fragment() {
 
         setupWebView()
         loadWeb()
+        setupNetworkMonitoring()
+    }
+    
+    private fun setupNetworkMonitoring() {
+        connectivityManager = requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                super.onAvailable(network)
+                Log.d(TAG, "Conexão de rede reestabelecida. Forçando reload da página.")
+                
+                // onAvailable roda em thread de background. Precisamos voltar para a Main Thread para atualizar a UI
+                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+                    webView.reload()
+                }
+            }
+        }
+
+        val networkRequest = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager?.registerNetworkCallback(networkRequest, networkCallback!!)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Importante: Desregistrar para não vazar memória se o Kiosk fechar
+        networkCallback?.let {
+            connectivityManager?.unregisterNetworkCallback(it)
+        }
     }
 
     private fun showPasswordDialog() {
