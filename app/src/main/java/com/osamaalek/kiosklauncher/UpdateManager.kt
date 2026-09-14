@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.osamaalek.kiosklauncher.services.KioskWatchdogService
 import com.osamaalek.kiosklauncher.util.KioskUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -140,6 +141,7 @@ object UpdateManager {
                 // Se o contexto for uma Activity, nós removemos a fixação da tela (Kiosk)
                 // para que o instalador do Android possa aparecer na frente do app.
                 if (context is Activity) {
+                    KioskWatchdogService.isKioskTemporarilyDisabled = true
                     KioskUtil.stopKioskMode(context)
                     // Pequeno delay essencial no Android 9 para o sistema liberar o travamento de tela
                     kotlinx.coroutines.delay(500)
